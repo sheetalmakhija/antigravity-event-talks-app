@@ -59,6 +59,28 @@ document.addEventListener('DOMContentLoaded', () => {
             document.documentElement.setAttribute('data-theme', 'dark');
         }
 
+        // Initialize Filters/Search from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const qParam = urlParams.get('q');
+        const typeParam = urlParams.get('type');
+        
+        if (qParam) {
+            searchQuery = qParam.toLowerCase();
+            searchInput.value = qParam;
+            clearSearchBtn.style.display = 'block';
+        }
+        
+        if (typeParam) {
+            activeFilterType = typeParam.toLowerCase();
+            typeFilters.querySelectorAll('.filter-tag').forEach(btn => {
+                if (btn.getAttribute('data-type') === activeFilterType) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+
         fetchReleaseNotes();
         setupEventListeners();
     }
@@ -147,6 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 2000);
             }).catch(err => {
                 console.error('Failed to copy text: ', err);
+                showToast('Failed to copy text', 'error');
             });
         });
 
@@ -194,9 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Failed to retrieve release notes:', error);
             statusText.textContent = 'Sync failed';
-            
-            // Show alert or handle error display
-            alert(`Error loading release notes: ${error.message}\nMake sure your Flask server is running.`);
+            showToast(`Sync failed: ${error.message}`, 'error');
         } finally {
             setLoadingState(false);
         }
@@ -314,7 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="card-body">
                             ${update.html}
                         </div>
-                        <button class="card-copy-btn" title="Copy update to clipboard" aria-label="Copy update to clipboard">
+                        <button class="card-copy-btn" title="Copy update to clipboard" aria-label="Copy update to clipboard" data-tooltip="Copy">
                             <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -333,6 +354,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         e.stopPropagation(); // Avoid triggering card selection click
                         navigator.clipboard.writeText(update.text).then(() => {
                             copyBtn.classList.add('copied');
+                            copyBtn.setAttribute('data-tooltip', 'Copied!');
+                            showToast('Copied update to clipboard!', 'success');
                             copyBtn.innerHTML = `
                                 <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                     <polyline points="20 6 9 17 4 12"></polyline>
@@ -340,6 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             `;
                             setTimeout(() => {
                                 copyBtn.classList.remove('copied');
+                                copyBtn.setAttribute('data-tooltip', 'Copy');
                                 copyBtn.innerHTML = `
                                     <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -349,6 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }, 2000);
                         }).catch(err => {
                             console.error('Failed to copy card text: ', err);
+                            showToast('Failed to copy text', 'error');
                         });
                     });
                     
@@ -366,10 +391,26 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hasMatches) {
             releaseNotesFeed.style.display = 'block';
             emptyState.style.display = 'none';
+
+            // Auto-select first update if nothing is selected yet
+            if (!selectedUpdateId) {
+                const firstCard = releaseNotesFeed.querySelector('.update-card');
+                if (firstCard) {
+                    const firstId = firstCard.getAttribute('data-id');
+                    const parts = firstId.split('-');
+                    const entryIdx = parseInt(parts[0]);
+                    const updateIdx = parseInt(parts[1]);
+                    const entry = rawFeedData[entryIdx];
+                    const update = entry.updates[updateIdx];
+                    selectUpdate(firstId, entry, update);
+                }
+            }
         } else {
             releaseNotesFeed.style.display = 'none';
             emptyState.style.display = 'block';
         }
+
+        updateUrlParams();
     }
 
     // Select release note item to display details
@@ -467,8 +508,15 @@ document.addEventListener('DOMContentLoaded', () => {
         tweetCharCounter.className = 'char-counter';
         if (length > 240 && length <= 280) {
             tweetCharCounter.classList.add('warning');
+            tweetBtn.disabled = false;
+            tweetBtn.classList.remove('disabled-warning');
         } else if (length > 280) {
             tweetCharCounter.classList.add('danger');
+            tweetBtn.disabled = true;
+            tweetBtn.classList.add('disabled-warning');
+        } else {
+            tweetBtn.disabled = (length === 0);
+            tweetBtn.classList.remove('disabled-warning');
         }
     }
 
@@ -512,7 +560,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (count === 0) {
-            alert('No updates to export with current filters.');
+            showToast('No updates to export with current filters.', 'error');
             return;
         }
 
@@ -524,5 +572,53 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    }
+
+    // Sync parameters to the browser address bar
+    function updateUrlParams() {
+        const url = new URL(window.location.href);
+        if (searchQuery) {
+            url.searchParams.set('q', searchQuery);
+        } else {
+            url.searchParams.delete('q');
+        }
+        
+        if (activeFilterType && activeFilterType !== 'all') {
+            url.searchParams.set('type', activeFilterType);
+        } else {
+            url.searchParams.delete('type');
+        }
+        
+        window.history.replaceState({}, '', url);
+    }
+
+    // Custom non-blocking Toast alert system
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+        
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        
+        let icon = 'ℹ️';
+        if (type === 'success') icon = '✅';
+        if (type === 'error') icon = '❌';
+        
+        toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+        container.appendChild(toast);
+        
+        // Force reflow
+        toast.offsetHeight;
+        
+        toast.classList.add('show');
+        
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                if (container.contains(toast)) {
+                    container.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
     }
 });
