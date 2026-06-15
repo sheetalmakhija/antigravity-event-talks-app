@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshBtn = document.getElementById('refreshBtn');
     const refreshIcon = document.getElementById('refreshIcon');
     const statusText = document.getElementById('statusText');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
     
     const searchInput = document.getElementById('searchInput');
     const clearSearchBtn = document.getElementById('clearSearchBtn');
@@ -56,6 +57,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Refresh feed
         refreshBtn.addEventListener('click', () => {
             fetchReleaseNotes(true);
+        });
+
+        // Export to CSV
+        exportCsvBtn.addEventListener('click', () => {
+            exportToCsv();
         });
 
         // Search input
@@ -179,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isLoading) {
             refreshIcon.classList.add('icon-spin');
             refreshBtn.disabled = true;
+            exportCsvBtn.style.display = 'none';
             feedSkeleton.style.display = 'block';
             releaseNotesFeed.style.display = 'none';
             emptyState.style.display = 'none';
@@ -186,6 +193,9 @@ document.addEventListener('DOMContentLoaded', () => {
             refreshIcon.classList.remove('icon-spin');
             refreshBtn.disabled = false;
             feedSkeleton.style.display = 'none';
+            if (rawFeedData && rawFeedData.length > 0) {
+                exportCsvBtn.style.display = 'inline-flex';
+            }
         }
     }
 
@@ -282,12 +292,43 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="card-body">
                             ${update.html}
                         </div>
+                        <button class="card-copy-btn" title="Copy update to clipboard" aria-label="Copy update to clipboard">
+                            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
                         <div class="selection-indicator">
                             <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="3" fill="none">
                                 <polyline points="20 6 9 17 4 12"></polyline>
                             </svg>
                         </div>
                     `;
+                    
+                    // Copy button event listener
+                    const copyBtn = cardEl.querySelector('.card-copy-btn');
+                    copyBtn.addEventListener('click', (e) => {
+                        e.stopPropagation(); // Avoid triggering card selection click
+                        navigator.clipboard.writeText(update.text).then(() => {
+                            copyBtn.classList.add('copied');
+                            copyBtn.innerHTML = `
+                                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            `;
+                            setTimeout(() => {
+                                copyBtn.classList.remove('copied');
+                                copyBtn.innerHTML = `
+                                    <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                    </svg>
+                                `;
+                            }, 2000);
+                        }).catch(err => {
+                            console.error('Failed to copy card text: ', err);
+                        });
+                    });
                     
                     // Clicking selects the card
                     cardEl.addEventListener('click', () => {
@@ -407,5 +448,59 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (length > 280) {
             tweetCharCounter.classList.add('danger');
         }
+    }
+
+    // Export visible updates to CSV format
+    function exportToCsv() {
+        const csvRows = [];
+        // Header row
+        csvRows.push(['Date', 'Type', 'Description', 'Link'].map(val => `"${val.replace(/"/g, '""')}"`).join(','));
+
+        let count = 0;
+        rawFeedData.forEach(entry => {
+            entry.updates.forEach(update => {
+                // Apply active filters
+                const typeLower = update.type.toLowerCase();
+                if (activeFilterType !== 'all') {
+                    if (activeFilterType === 'feature' && !typeLower.includes('feature')) return;
+                    if (activeFilterType === 'change' && !typeLower.includes('change')) return;
+                    if (activeFilterType === 'breaking' && !typeLower.includes('breaking')) return;
+                    if (activeFilterType === 'announcement' && !typeLower.includes('announcement')) return;
+                    if (activeFilterType === 'issue' && !typeLower.includes('issue')) return;
+                }
+
+                // Apply search filter
+                if (searchQuery) {
+                    const bodyLower = update.text.toLowerCase();
+                    const dateLower = entry.date.toLowerCase();
+                    const isMatch = typeLower.includes(searchQuery) || 
+                                    bodyLower.includes(searchQuery) || 
+                                    dateLower.includes(searchQuery);
+                    if (!isMatch) return;
+                }
+
+                const cleanText = update.text.replace(/"/g, '""');
+                const cleanDate = entry.date.replace(/"/g, '""');
+                const cleanType = update.type.replace(/"/g, '""');
+                const cleanLink = (entry.link || '').replace(/"/g, '""');
+
+                csvRows.push([cleanDate, cleanType, cleanText, cleanLink].map(val => `"${val}"`).join(','));
+                count++;
+            });
+        });
+
+        if (count === 0) {
+            alert('No updates to export with current filters.');
+            return;
+        }
+
+        const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `bigquery_release_notes_${activeFilterType}_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 });

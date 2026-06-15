@@ -1021,6 +1021,46 @@ body {
     margin-top: auto;
 }
 
+/* Card Copy Button */
+.card-copy-btn {
+    position: absolute;
+    right: 1.25rem;
+    top: 1.25rem;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    z-index: 2;
+}
+
+.card-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--color-text-main);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+.card-copy-btn:active {
+    transform: scale(0.95);
+}
+
+.card-copy-btn.copied {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: var(--color-feature);
+}
+
+.update-card.selected .card-copy-btn {
+    right: 3.25rem; /* Shifts left when selected to avoid overlapping selection indicator */
+}
+
 /* Responsive Breakpoints */
 @media (max-width: 1280px) {
     .app-layout {
