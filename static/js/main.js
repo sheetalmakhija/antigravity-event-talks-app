@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshIcon = document.getElementById('refreshIcon');
     const statusText = document.getElementById('statusText');
     const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const themeToggleCheckbox = document.getElementById('themeToggleCheckbox');
     
     const searchInput = document.getElementById('searchInput');
     const clearSearchBtn = document.getElementById('clearSearchBtn');
@@ -48,6 +49,16 @@ document.addEventListener('DOMContentLoaded', () => {
     init();
 
     function init() {
+        // Initialize Theme from localStorage
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        if (savedTheme === 'light') {
+            themeToggleCheckbox.checked = true;
+            document.documentElement.setAttribute('data-theme', 'light');
+        } else {
+            themeToggleCheckbox.checked = false;
+            document.documentElement.setAttribute('data-theme', 'dark');
+        }
+
         fetchReleaseNotes();
         setupEventListeners();
     }
@@ -62,6 +73,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // Export to CSV
         exportCsvBtn.addEventListener('click', () => {
             exportToCsv();
+        });
+
+        // Theme Switch Toggle
+        themeToggleCheckbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                document.documentElement.setAttribute('data-theme', 'light');
+                localStorage.setItem('theme', 'light');
+            } else {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                localStorage.setItem('theme', 'dark');
+            }
         });
 
         // Search input
